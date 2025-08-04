@@ -414,7 +414,7 @@ export function ChatArea({ selectedChannel, selectedDmUser }: ChatAreaProps) {
       <div className="flex-1 flex items-center justify-center bg-slate-800">
         <div className="text-center">
           <Brain className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-white mb-2">Welcome to SlackAI</h3>
+          <h3 className="text-xl font-semibold text-white mb-2">Welcome to Varta AI</h3>
           <p className="text-slate-400">Select a channel or start a direct message to begin</p>
         </div>
       </div>

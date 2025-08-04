@@ -31,12 +31,12 @@ export const channelMembers = pgTable("channel_members", {
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
 });
 
-export const messages = pgTable("messages", {
+export const messages: any = pgTable("messages", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
   authorId: integer("author_id").notNull().references(() => users.id),
   channelId: integer("channel_id").references(() => channels.id),
-  parentMessageId: integer("parent_message_id").references(() => messages.id),
+  parentMessageId: integer("parent_message_id").references((): any => messages.id),
   recipientId: integer("recipient_id").references(() => users.id), // for DMs
   aiAnalysis: jsonb("ai_analysis"), // stores tone, impact, clarity analysis
   createdAt: timestamp("created_at").defaultNow().notNull(),

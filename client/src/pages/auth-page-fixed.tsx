@@ -64,7 +64,7 @@ export default function AuthPage() {
           <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
             <Brain className="h-4 w-4 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">SlackAI</h1>
+          <h1 className="text-xl font-bold text-white">Varta AI</h1>
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export default function AuthPage() {
             <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
               <Brain className="h-8 w-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">SlackAI</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">Varta AI</h1>
             <p className="text-slate-400">Intelligent Team Communication</p>
           </div>
 

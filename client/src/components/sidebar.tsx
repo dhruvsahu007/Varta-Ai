@@ -33,6 +33,7 @@ interface SidebarProps {
   onDmUserSelect: (userId: number) => void;
 }
 
+// Modernized Sidebar: improved layout, spacing, icons, and mobile support
 export function Sidebar({ 
   selectedChannel, 
   selectedDmUser, 
@@ -114,148 +115,93 @@ export function Sidebar({
   };
 
   return (
-    <div className="w-64 bg-purple-900 flex flex-col border-r border-purple-800">
+    <aside className="w-64 bg-background border-r border-border flex flex-col min-h-screen transition-all duration-300">
       {/* Workspace Header */}
-      <div className="p-4 border-b border-purple-800">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-            <Brain className="text-white text-sm" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-white">SlackAI Workspace</h1>
-            <div className="flex items-center space-x-1">
-              <Circle className="w-2 h-2 bg-green-400 rounded-full" />
-              <span className="text-xs text-slate-300">AI Brain Active</span>
-            </div>
-          </div>
+      <div className="flex items-center gap-3 p-4 border-b border-border bg-gradient-to-r from-primary/80 to-accent/80">
+        <img src="/generated-icon.png" alt="Workspace Logo" className="w-10 h-10 rounded-lg shadow" />
+        <div>
+          <h1 className="font-bold text-lg text-foreground">Varta AI Workspace</h1>
+          <span className="flex items-center gap-1 text-xs text-green-400">
+            <Circle className="w-2 h-2" /> AI Brain Active
+          </span>
         </div>
       </div>
-
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {/* Channels Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wide">
-              Channels
-            </h3>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-5 w-5 text-slate-300 hover:text-white"
-              onClick={() => setIsChannelModalOpen(true)}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-          <div className="space-y-1">
+      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-6">
+        <div>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-2 tracking-wider">Channels</h2>
+          <ul className="space-y-1">
             {channels.map((channel) => (
-              <button
-                key={channel.id}
-                onClick={() => onChannelSelect(channel.id)}
-                className={`flex items-center space-x-2 px-2 py-1 rounded text-sm w-full text-left transition-colors ${
-                  selectedChannel === channel.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-purple-800 hover:text-white'
-                }`}
-              >
-                <Hash className="h-4 w-4" />
-                <span className="truncate">{channel.name}</span>
-                {/* Mock notification badge for some channels */}
-                {channel.name === 'project-atlas' && (
-                  <Badge variant="destructive" className="ml-auto text-xs">3</Badge>
-                )}
-              </button>
+              <li key={channel.id}>
+                <Button
+                  variant={selectedChannel === channel.id ? 'secondary' : 'ghost'}
+                  className="w-full flex items-center gap-2 justify-start px-3 py-2 rounded-md transition-colors"
+                  onClick={() => onChannelSelect(channel.id)}
+                  aria-current={selectedChannel === channel.id}
+                >
+                  <Hash className="h-4 w-4 text-primary" />
+                  <span className="truncate">{channel.name}</span>
+                  {channel.isPrivate && <Lock className="h-3 w-3 ml-1 text-muted-foreground" />}
+                </Button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-
-        {/* Direct Messages Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wide">
-              Direct Messages
-            </h3>
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-300 hover:text-white">
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
-          <div className="space-y-1">
-            {dmUsers.map((dmUser) => (
-              <button
-                key={dmUser.id}
-                onClick={() => onDmUserSelect(dmUser.id)}
-                className={`flex items-center space-x-2 px-2 py-1 rounded text-sm w-full text-left transition-colors ${
-                  selectedDmUser === dmUser.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-purple-800 hover:text-white'
-                }`}
-              >
-                {getStatusIcon(dmUser.status)}
-                <span className="truncate">{dmUser.displayName}</span>
-                {/* Mock notification for some users */}
-                {dmUser.username === 'mike' && (
-                  <Badge variant="destructive" className="ml-auto text-xs">1</Badge>
-                )}
-              </button>
+        <div>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-2 tracking-wider">Direct Messages</h2>
+          <ul className="space-y-1">
+            {dmUsers.map((user) => (
+              <li key={user.id}>
+                <Button
+                  variant={selectedDmUser === user.id ? 'secondary' : 'ghost'}
+                  className="w-full flex items-center gap-2 justify-start px-3 py-2 rounded-md transition-colors"
+                  onClick={() => onDmUserSelect(user.id)}
+                  aria-current={selectedDmUser === user.id}
+                >
+                  <Avatar className="w-6 h-6">
+                    <AvatarImage src={user.avatar} />
+                    <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{user.displayName}</span>
+                </Button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-
-        {/* AI Features Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wide">
-              AI Tools
-            </h3>
-          </div>
-          <div className="space-y-1">
-            <button className="flex items-center space-x-2 px-2 py-1 rounded text-sm text-slate-300 hover:bg-purple-800 hover:text-white transition-colors w-full text-left">
-              <Brain className="h-4 w-4 text-blue-400" />
-              <span>Org Memory</span>
-            </button>
-            <button className="flex items-center space-x-2 px-2 py-1 rounded text-sm text-slate-300 hover:bg-purple-800 hover:text-white transition-colors w-full text-left">
-              <FileText className="h-4 w-4 text-green-400" />
-              <span>Meeting Notes</span>
-            </button>
-            <button className="flex items-center space-x-2 px-2 py-1 rounded text-sm text-slate-300 hover:bg-purple-800 hover:text-white transition-colors w-full text-left">
-              <TrendingUp className="h-4 w-4 text-red-400" />
-              <span>Tone Analytics</span>
-            </button>
-          </div>
+        <div>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase mb-2 tracking-wider">AI Tools</h2>
+          <ul className="space-y-1">
+            <li>
+              <Button variant="ghost" className="w-full flex items-center gap-2">
+                <Brain className="h-4 w-4 text-blue-400" /> Org Memory
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" className="w-full flex items-center gap-2">
+                <FileText className="h-4 w-4 text-green-400" /> Meeting Notes
+              </Button>
+            </li>
+            <li>
+              <Button variant="ghost" className="w-full flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-red-400" /> Tone Analytics
+              </Button>
+            </li>
+          </ul>
         </div>
-      </div>
-
+      </nav>
       {/* User Profile */}
-      <div className="p-3 border-t border-purple-800">
-        <div className="flex items-center space-x-3">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user?.avatar || undefined} />
-            <AvatarFallback className="bg-slate-600 text-white">
-              {user?.displayName?.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user?.displayName}</p>
-            <p className="text-xs text-slate-300 truncate">{user?.status}</p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-slate-300 hover:text-white"
-            onClick={() => setIsProfileModalOpen(true)}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-slate-300 hover:text-white"
-            onClick={() => logoutMutation.mutate()}
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+      <div className="p-4 border-t border-border flex items-center gap-3 bg-muted/40">
+        <Avatar>
+          <AvatarImage src={user?.avatar} />
+          <AvatarFallback>{user?.username?.[0]}</AvatarFallback>
+        </Avatar>
+        <div>
+          <span className="block font-medium text-foreground">{user?.displayName}</span>
+          <span className="block text-xs text-muted-foreground">{user?.username}</span>
         </div>
+        <Button variant="ghost" size="icon" className="ml-auto" onClick={logoutMutation.mutate} aria-label="Log out">
+          <LogOut className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Create Channel Modal */}
@@ -398,6 +344,6 @@ export function Sidebar({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </aside>
   );
 }
