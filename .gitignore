@@ -5,3 +5,29 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+.env.local
+.env.production
+.env.development
+
+# Docker
+.dockerignore
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+
+# Production builds
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

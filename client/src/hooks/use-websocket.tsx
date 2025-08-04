@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./use-auth";
+import { WS_BASE_URL } from "../config";
 
 export interface WebSocketMessage {
   type: string;
@@ -15,8 +16,8 @@ export function useWebSocket() {
   useEffect(() => {
     if (!user) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    // Use configured WebSocket URL
+    const wsUrl = `${WS_BASE_URL}/ws`;
     
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
