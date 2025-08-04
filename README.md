@@ -1,18 +1,12 @@
-# 🧠 Slack AI Companion
+# 🧠 Varta AI Companion
 
 A **Slack-like chat platform** powered by AI that enhances workplace communication with smart features like Org Memory, Instant Reply Composer, and AI-Powered Meeting Notes.
 
 ---
 
-## 🚀 Live Demo
-
-👉 [Live App on Render](https://slackai-oirf.onrender.com/)
-
----
-
 ## 🛠 Features
 
-### 🧩 Slack-Clone Core
+### 🧩 Varta AI
 
 - Multi-user chat interface with **threads**, **mentions**, and **channels**
 - Responsive UI styled with **TailwindCSS + Radix UI**
@@ -63,8 +57,7 @@ Select any **thread or channel**, click **“Generate Notes”**, and AI generat
 
 ### 1. Clone the Repo
 ```bash
-git clone https://github.com/dhruvsahu007/slackai.git
-cd SlackAiCompanionNew
+git clone https://github.com/dhruvsahu007/Varta-Ai
 ```
 ### 2. Install Dependencies
 ```bash
