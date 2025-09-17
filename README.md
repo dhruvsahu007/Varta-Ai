@@ -57,7 +57,6 @@ Select any **thread or channel**, click **“Generate Notes”**, and AI generat
 
 ### Prerequisites
 - Node.js 18+ 
-- Docker & Docker Compose (for production)
 - PostgreSQL database (local or cloud)
 
 ### 1. Clone the Repo
@@ -82,22 +81,16 @@ cp .env.example .env
 # - SESSION_SECRET=your-secure-session-secret
 ```
 
-### 4. Development Setup
-
-#### Option A: Separated Frontend & Backend (Recommended)
+### 4. Database Setup
 ```bash
-# Windows
-./dev.bat
+# Push database schema
+npm run db:push
 
-# Linux/Mac
-./dev.sh
+# Seed with sample data
+npm run seed
 ```
-This runs:
-- Frontend on http://localhost:3000
-- Backend API on http://localhost:5000
-- WebSocket on ws://localhost:5000/ws
 
-#### Option B: Manual Setup
+### 5. Development Setup
 ```bash
 # Terminal 1 - Backend
 npm run dev:backend
@@ -105,34 +98,18 @@ npm run dev:backend
 # Terminal 2 - Frontend  
 npm run dev:frontend
 ```
+This runs:
+- Frontend on http://localhost:3000
+- Backend API on http://localhost:5000
+- WebSocket on ws://localhost:5000/ws
 
-### 5. Production Deployment
-
-#### Option A: Docker Compose (Recommended)
-```bash
-# Windows
-./deploy.bat
-
-# Linux/Mac
-./deploy.sh
-```
-
-#### Option B: Manual Production Build
+### 6. Production Build
 ```bash
 # Build both frontend and backend
 npm run build
 
 # Start production server (serves both)
 npm start
-```
-
-### 6. Database Setup
-```bash
-# Push database schema
-npm run db:push
-
-# Seed with sample data
-npm run seed
 ```
 ## 🛰 Deployment
 
@@ -141,28 +118,9 @@ npm run seed
 # Separated services
 npm run dev:frontend  # Port 3000
 npm run dev:backend   # Port 5000
-
-# Or use helper scripts
-./dev.bat            # Windows
-./dev.sh             # Linux/Mac
 ```
 
-### Production Deployment
-
-#### Docker Compose (Recommended)
-```bash
-# Build and deploy
-./deploy.bat         # Windows  
-./deploy.sh          # Linux/Mac
-
-# Manual commands
-npm run docker:build
-npm run docker:up
-npm run docker:logs  # Monitor logs
-npm run docker:down  # Stop services
-```
-
-#### Cloud Deployment (Render/Railway/Vercel)
+### Cloud Deployment (Render/Railway/Vercel)
 - **Frontend**: Deploy `/client` folder with `npm run build:frontend`
 - **Backend**: Deploy with `npm run build:backend` and `npm start`
 - **Environment**: Set all variables from `.env.example`

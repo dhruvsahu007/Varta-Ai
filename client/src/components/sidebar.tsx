@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Circle,
   LogOut,
+  Lock,
   User as UserIcon
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -159,7 +160,7 @@ export function Sidebar({
                   aria-current={selectedDmUser === user.id}
                 >
                   <Avatar className="w-6 h-6">
-                    <AvatarImage src={user.avatar} />
+                    <AvatarImage src={user.avatar || undefined} />
                     <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
                   </Avatar>
                   <span className="truncate">{user.displayName}</span>
@@ -192,14 +193,14 @@ export function Sidebar({
       {/* User Profile */}
       <div className="p-4 border-t border-border flex items-center gap-3 bg-muted/40">
         <Avatar>
-          <AvatarImage src={user?.avatar} />
+          <AvatarImage src={user?.avatar || undefined} />
           <AvatarFallback>{user?.username?.[0]}</AvatarFallback>
         </Avatar>
         <div>
           <span className="block font-medium text-foreground">{user?.displayName}</span>
           <span className="block text-xs text-muted-foreground">{user?.username}</span>
         </div>
-        <Button variant="ghost" size="icon" className="ml-auto" onClick={logoutMutation.mutate} aria-label="Log out">
+        <Button variant="ghost" size="icon" className="ml-auto" onClick={() => logoutMutation.mutate()} aria-label="Log out">
           <LogOut className="h-4 w-4" />
         </Button>
       </div>

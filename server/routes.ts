@@ -3,10 +3,14 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
+import rateLimit from "express-rate-limit";
 import { 
   insertChannelSchema, 
   insertMessageSchema,
-  insertMeetingNotesSchema
+  insertMeetingNotesSchema,
+  messages,
+  channels,
+  users
 } from "@shared/schema";
 import { 
   analyzeTone, 
@@ -14,8 +18,22 @@ import {
   queryOrgMemory, 
   generateMeetingNotes 
 } from "./ai";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export function registerRoutes(app: Express): Server {
+  // Rate limiting for AI endpoints
+  const aiRateLimit = rateLimit({
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+    max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // limit each IP to 100 requests per windowMs
+    message: {
+      error: 'Too many AI requests, please try again later.',
+      retryAfter: '15 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   // Setup authentication routes
   setupAuth(app);
 
@@ -196,8 +214,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // AI Features
-  app.post("/api/ai/suggest-reply", async (req, res) => {
+  // AI Features (with rate limiting)
+  app.post("/api/ai/suggest-reply", aiRateLimit, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
@@ -275,27 +293,97 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/ai/analyze-tone", async (req, res) => {
+  app.post("/api/ai/analyze-tone", aiRateLimit, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
       const { content } = req.body;
+      
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ 
+          message: "Invalid content",
+          details: "Content is required and must be a string" 
+        });
+      }
+
+      console.log("[API] Analyzing tone for content:", content.substring(0, 50) + "...");
+      
       const analysis = await analyzeTone(content);
       res.json(analysis);
     } catch (error) {
-      res.status(500).json({ message: "Failed to analyze tone" });
+      console.error("[API] Tone analysis error:", error);
+      res.status(500).json({ 
+        message: "Failed to analyze tone",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
-  app.post("/api/ai/org-memory", async (req, res) => {
+  // Debug endpoint for org memory
+  app.get("/api/debug/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const messageCount = await db.select({}).from(messages);
+      const channelCount = await db.select({}).from(channels);
+      const userCount = await db.select({}).from(users);
+      
+      const sampleMessages = await db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          channelId: messages.channelId,
+          recipientId: messages.recipientId,
+          authorName: users.displayName,
+          channelName: channels.name
+        })
+        .from(messages)
+        .leftJoin(users, eq(messages.authorId, users.id))
+        .leftJoin(channels, eq(messages.channelId, channels.id))
+        .limit(10);
+
+      res.json({
+        messageCount: messageCount.length,
+        channelCount: channelCount.length,
+        userCount: userCount.length,
+        sampleMessages
+      });
+    } catch (error) {
+      console.error("[DEBUG] Error fetching debug info:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  app.post("/api/ai/org-memory", aiRateLimit, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
       const { query } = req.body;
       
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ 
+          message: "Invalid query",
+          details: "Query is required and must be a string" 
+        });
+      }
+
+      console.log("[API] Searching organizational memory for:", query);
+      
       // Search relevant messages across channels (simplified)
       const relevantMessages = await storage.searchMessages(query);
       
+      console.log("[API] Found", relevantMessages.length, "relevant messages");
+      
+      if (relevantMessages.length === 0) {
+        console.warn("[API] No messages found for query, returning empty result");
+        return res.json({
+          query,
+          summary: "No relevant messages found for your query. This could mean: 1) The search terms don't match any existing messages, 2) There are no messages in the database yet, or 3) All messages are in private channels or direct messages.",
+          sources: [],
+          keyPoints: ["Try using different keywords", "Check if there are any messages in public channels", "Verify that the database has been seeded with sample data"]
+        });
+      }
+
       const formattedMessages = relevantMessages.map(msg => ({
         content: msg.content,
         channelName: msg.channel?.name || "Direct Message",
@@ -303,14 +391,22 @@ export function registerRoutes(app: Express): Server {
         timestamp: msg.createdAt.toISOString()
       }));
 
+      console.log("[API] Formatted messages for AI:", formattedMessages.slice(0, 2));
+
       const result = await queryOrgMemory(query, formattedMessages);
+      console.log("[API] Successfully processed org memory query");
+      
       res.json(result);
     } catch (error) {
-      res.status(500).json({ message: "Failed to query organizational memory" });
+      console.error("[API] Org memory error:", error);
+      res.status(500).json({ 
+        message: "Failed to query organizational memory",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
-  app.post("/api/ai/generate-notes", async (req, res) => {
+  app.post("/api/ai/generate-notes", aiRateLimit, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {

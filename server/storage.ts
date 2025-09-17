@@ -5,12 +5,11 @@ import {
   type MeetingNotes, type InsertMeetingNotes, type ChannelMember
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, not, isNull } from "drizzle-orm";
+import { eq, and, or, desc, asc, not, isNull, sql, like } from "drizzle-orm";
 import session from "express-session";
-import connectPg from "connect-pg-simple";
-import { pool } from "./db";
+import connectSqlite3 from "connect-sqlite3";
 
-const PostgresSessionStore = connectPg(session);
+const SQLiteStore = connectSqlite3(session);
 
 export interface IStorage {
   // User methods
@@ -52,9 +51,9 @@ export class DatabaseStorage implements IStorage {
   sessionStore: any;
 
   constructor() {
-    this.sessionStore = new PostgresSessionStore({ 
-      pool, 
-      createTableIfMissing: true 
+    this.sessionStore = new SQLiteStore({ 
+      db: 'sessions.db',
+      table: 'sessions'
     });
   }
 
@@ -228,10 +227,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessage(message: InsertMessage): Promise<Message & { author: User }> {
-    const [newMessage] = await db
+    const insertResult = await db
       .insert(messages)
       .values(message)
       .returning();
+    const newMessage = Array.isArray(insertResult) ? insertResult[0] : insertResult;
 
     const [messageWithAuthor] = await db
       .select({
@@ -274,35 +274,80 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchMessages(query: string, channelId?: number): Promise<(Message & { author: User; channel?: Channel })[]> {
-    let queryBuilder = db
-      .select({
-        id: messages.id,
-        content: messages.content,
-        authorId: messages.authorId,
-        channelId: messages.channelId,
-        parentMessageId: messages.parentMessageId,
-        recipientId: messages.recipientId,
-        aiAnalysis: messages.aiAnalysis,
-        createdAt: messages.createdAt,
-        updatedAt: messages.updatedAt,
-        author: users,
-        channel: channels,
-      })
-      .from(messages)
-      .innerJoin(users, eq(messages.authorId, users.id))
-      .leftJoin(channels, eq(messages.channelId, channels.id));
+    console.log("[Storage] Searching for query:", query, "in channelId:", channelId);
+    
+    try {
+      // First, let's see what messages exist in the database
+      const allMessages = await db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          channelId: messages.channelId,
+        })
+        .from(messages)
+        .limit(10);
+      
+      console.log("[Storage] Sample messages in database:", allMessages);
+      
+      if (allMessages.length === 0) {
+        console.warn("[Storage] No messages found in database");
+        return [];
+      }
+      
+      const baseQuery = db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          authorId: messages.authorId,
+          channelId: messages.channelId,
+          parentMessageId: messages.parentMessageId,
+          recipientId: messages.recipientId,
+          aiAnalysis: messages.aiAnalysis,
+          createdAt: messages.createdAt,
+          updatedAt: messages.updatedAt,
+          author: users,
+          channel: channels,
+        })
+        .from(messages)
+        .innerJoin(users, eq(messages.authorId, users.id))
+        .leftJoin(channels, eq(messages.channelId, channels.id));
 
-    if (channelId) {
-      queryBuilder = queryBuilder.where(
+      // Add search condition - SQLite uses LIKE for text search (case-insensitive)
+      const searchPattern = `%${query.toLowerCase()}%`;
+      console.log("[Storage] Search pattern:", searchPattern);
+      
+      let whereConditions = [
+        sql`lower(${messages.content}) LIKE ${searchPattern}`
+      ];
+      
+      // Only search in public channels for org memory (exclude DMs and private channels)
+      whereConditions.push(
         and(
-          eq(messages.channelId, channelId),
-          // Note: In a real app, you'd use proper full-text search
-          // This is a simple LIKE search for demo purposes
+          isNull(messages.recipientId), // Exclude DMs
+          or(
+            isNull(channels.isPrivate), // Channel might be null for some messages
+            eq(channels.isPrivate, false) // Only public channels
+          )
         )
       );
-    }
+      
+      if (channelId) {
+        whereConditions.push(eq(messages.channelId, channelId));
+      }
 
-    return await queryBuilder.orderBy(desc(messages.createdAt)).limit(20);
+      const result = await baseQuery
+        .where(and(...whereConditions))
+        .orderBy(desc(messages.createdAt))
+        .limit(50); // Increased limit for better AI analysis
+        
+      console.log("[Storage] Search returned", result.length, "messages");
+      console.log("[Storage] Sample results:", result.slice(0, 2).map(r => ({ content: r.content?.substring(0, 100), channel: r.channel?.name })));
+      
+      return result;
+    } catch (error) {
+      console.error("[Storage] Error in searchMessages:", error);
+      return [];
+    }
   }
 
   async createAiSuggestion(suggestion: InsertAiSuggestion): Promise<AiSuggestion> {

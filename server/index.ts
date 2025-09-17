@@ -10,8 +10,21 @@ import { setupVite, serveStatic, log } from "./vite";
 const app = express();
 
 // ✅ Enable CORS for production
+// CORS configuration for production
+const getAllowedOrigins = () => {
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl) {
+    throw new Error("FRONTEND_URL environment variable is required in production");
+  }
+  
+  // Allow multiple origins if comma-separated
+  return frontendUrl.split(',').map(url => url.trim());
+};
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: process.env.NODE_ENV === 'production' 
+    ? getAllowedOrigins() 
+    : ["http://localhost:3000", "http://127.0.0.1:3000"],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],

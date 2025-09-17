@@ -1,13 +1,9 @@
 import { config as loadEnv } from "dotenv";
 loadEnv(); // Load environment variables from .env
 
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
 import * as schema from "@shared/schema";
-
-// Configure Neon to use WebSocket constructor
-neonConfig.webSocketConstructor = ws;
 
 // Check for required DATABASE_URL
 if (!process.env.DATABASE_URL) {
@@ -16,6 +12,6 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Create PostgreSQL connection pool and initialize Drizzle ORM
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+// Create SQLite connection and initialize Drizzle ORM
+const sqlite = new Database(process.env.DATABASE_URL.replace('file:', ''));
+export const db = drizzle(sqlite, { schema });

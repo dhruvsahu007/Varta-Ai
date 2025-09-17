@@ -223,6 +223,7 @@ export default function AuthPage() {
                             <FormControl>
                               <Input 
                                 {...field} 
+                                value={field.value || ''}
                                 className="bg-slate-700 border-slate-600 text-white"
                                 placeholder="e.g., Product Manager"
                               />

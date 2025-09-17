@@ -57,6 +57,7 @@ export default function HomePage() {
       <AiModal 
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
+        selectedMessage={null}
       />
     </div>
   );

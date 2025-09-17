@@ -56,7 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData([API_ENDPOINTS.USER], user);
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.displayName}!`,
       });
     },
     onError: (error: Error) => {
@@ -66,7 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         : error.message;
       toast({
         title: "Login failed",
-        description: errorMessage || "Invalid credentials. Please try again.",
         variant: "destructive",
       });
     },

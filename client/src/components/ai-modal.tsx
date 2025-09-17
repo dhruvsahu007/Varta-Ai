@@ -103,14 +103,10 @@ export function AiModal({ isOpen, onClose, selectedMessage }: AiModalProps) {
         throw new Error("Message content is required");
       }
 
-      const contextLines = input.threadContext.split('\n').filter(line => line.trim());
-      if (contextLines.length === 0) {
-        throw new Error("Thread context is required");
-      }
-
+      // For AI modal, we treat the input as the message to reply to
       const res = await apiRequest("POST", "/api/ai/suggest-reply", {
-        messageContent: contextLines[0], // First line is the message to reply to
-        threadContext: contextLines.slice(1), // Rest is context
+        messageContent: input.messageContent, // The message we want to reply to
+        threadContext: [], // No additional context from AI modal
         orgContext: "AI Assistant modal conversation", // Default context for modal
         messageId: null, // Explicitly indicate this is not tied to a message
         generateMultiple: true // Request multiple suggestions
@@ -237,7 +233,7 @@ export function AiModal({ isOpen, onClose, selectedMessage }: AiModalProps) {
     
     replyGeneration.mutate({
       messageContent: replyContext,
-      threadContext: replyContext
+      threadContext: "" // Not used in AI modal
     });
   };
 
@@ -486,12 +482,26 @@ export function AiModal({ isOpen, onClose, selectedMessage }: AiModalProps) {
                   )}
                 </Button>
                 
+                {orgMemoryQuery.isError && (
+                  <div className="mt-4 p-4 bg-red-900/20 border border-red-700/30 rounded-lg">
+                    <div className="flex items-center gap-2 text-red-400 mb-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <h5 className="font-medium">Org Memory Search Failed</h5>
+                    </div>
+                    <p className="text-sm text-slate-300">
+                      {orgMemoryQuery.error instanceof Error 
+                        ? orgMemoryQuery.error.message 
+                        : "Failed to search organizational memory. Please try again."}
+                    </p>
+                  </div>
+                )}
+
                 {orgMemoryQuery.data && (
                   <div className="mt-4 p-4 bg-slate-700 rounded-lg">
                     <h4 className="text-white font-semibold mb-2">Search Results</h4>
                     <p className="text-white mb-3">{orgMemoryQuery.data.summary}</p>
                     
-                    {orgMemoryQuery.data.keyPoints && (
+                    {orgMemoryQuery.data.keyPoints && orgMemoryQuery.data.keyPoints.length > 0 && (
                       <div className="mb-3">
                         <h5 className="text-slate-400 font-medium mb-1">Key Points:</h5>
                         <ul className="text-white text-sm space-y-1">
@@ -502,7 +512,7 @@ export function AiModal({ isOpen, onClose, selectedMessage }: AiModalProps) {
                       </div>
                     )}
                     
-                    {orgMemoryQuery.data.sources && (
+                    {orgMemoryQuery.data.sources && orgMemoryQuery.data.sources.length > 0 && (
                       <div>
                         <h5 className="text-slate-400 font-medium mb-1">Sources:</h5>
                         <div className="space-y-2">
@@ -512,6 +522,13 @@ export function AiModal({ isOpen, onClose, selectedMessage }: AiModalProps) {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+                    
+                    {(!orgMemoryQuery.data.keyPoints || orgMemoryQuery.data.keyPoints.length === 0) && 
+                     (!orgMemoryQuery.data.sources || orgMemoryQuery.data.sources.length === 0) && (
+                      <div className="text-slate-400 text-sm">
+                        No specific details found, but here's what I found in your organization's messages.
                       </div>
                     )}
                   </div>
