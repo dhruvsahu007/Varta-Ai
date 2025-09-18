@@ -1,0 +1,47 @@
+[Unit]
+Description=Varta-AI Application Service
+Documentation=https://github.com/dhruvsahu007/Varta-Ai
+After=docker.service
+Requires=docker.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+Group=docker
+WorkingDirectory=/home/ubuntu/deploy
+
+# Environment variables
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=COMPOSE_HTTP_TIMEOUT=120
+Environment=DOCKER_CLIENT_TIMEOUT=120
+
+# Start command - bring up the application
+ExecStart=/usr/local/bin/docker-compose -f /home/ubuntu/deploy/docker-compose.prod.yml up -d
+
+# Stop command - bring down the application
+ExecStop=/usr/local/bin/docker-compose -f /home/ubuntu/deploy/docker-compose.prod.yml down
+
+# Reload command - restart the application
+ExecReload=/bin/bash -c '/usr/local/bin/docker-compose -f /home/ubuntu/deploy/docker-compose.prod.yml down && /usr/local/bin/docker-compose -f /home/ubuntu/deploy/docker-compose.prod.yml up -d'
+
+# Restart configuration
+Restart=on-failure
+RestartSec=30
+StartLimitBurst=3
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/ubuntu/deploy
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=varta-deploy
+
+[Install]
+WantedBy=multi-user.target

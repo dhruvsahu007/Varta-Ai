@@ -119,6 +119,93 @@ npm start
 # Separated services
 npm run dev:frontend  # Port 3000
 npm run dev:backend   # Port 5000
+
+# Or use Docker for development
+docker-compose up --build
+```
+
+### Production Deployment
+
+#### 1. AWS ECR Setup
+The repository includes GitHub Actions workflow for automated deployment to AWS ECR:
+- Push to `main` branch triggers automatic build and push to ECR
+- Frontend and backend images are built separately
+- Images are tagged with both `latest` and commit SHA
+
+#### 2. EC2 Production Deployment
+```bash
+# 1. Deploy application to EC2 (run from your local machine)
+./deploy/deploy.sh
+
+# 2. SSH to your EC2 instance and set up systemd service
+ssh ubuntu@your-ec2-instance
+
+# 3. Run the service setup script (on EC2)
+sudo ./deploy/setup-service.sh
+```
+
+#### 3. Systemd Service Management
+Once the service is installed, manage it with systemd commands:
+
+```bash
+# Start the service
+sudo systemctl start varta-deploy
+
+# Stop the service
+sudo systemctl stop varta-deploy
+
+# Restart the service
+sudo systemctl restart varta-deploy
+
+# Check service status
+sudo systemctl status varta-deploy
+
+# View service logs
+sudo journalctl -u varta-deploy -f
+
+# View last 50 log entries
+sudo journalctl -u varta-deploy -n 50
+```
+
+#### 4. Manual Docker Compose (Alternative)
+If you prefer manual management without systemd:
+```bash
+# Run in production mode
+cd /home/ubuntu/deploy
+docker-compose -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Stop services
+docker-compose -f docker-compose.prod.yml down
+```
+
+#### 5. Environment Variables
+Ensure these environment variables are set in your EC2 environment or .env file:
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_REGION`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- Any other application-specific variables
+
+#### 6. Health Checks
+The application exposes health check endpoints:
+- Frontend: `http://your-domain/` (served by nginx)
+- Backend: `http://your-domain:3000/api/health`
+
+#### 7. Deployment Files Structure
+```
+deploy/
+├── deploy.sh              # EC2 deployment script
+├── setup-service.sh       # Systemd service setup
+├── varta-deploy.service   # Systemd service configuration
+client/Dockerfile          # Frontend production Dockerfile
+server/Dockerfile          # Backend production Dockerfile
+docker-compose.prod.yml    # Production Docker Compose
+.github/workflows/
+└── deploy-ecr.yml         # GitHub Actions ECR workflow
 ```
 
 ### Cloud Deployment (Render/Railway/Vercel)

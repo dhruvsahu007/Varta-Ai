@@ -1,0 +1,104 @@
+name: Build and Push to ECR
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  FRONTEND_REPO_NAME: varta-ai-frontend
+  BACKEND_REPO_NAME: varta-ai-backend
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+
+    outputs:
+      frontend-uri: ${{ steps.outputs.outputs.frontend-uri }}
+      backend-uri: ${{ steps.outputs.outputs.backend-uri }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Create ECR repositories if they don't exist
+      run: |
+        # Create frontend repository
+        aws ecr describe-repositories --repository-names ${{ env.FRONTEND_REPO_NAME }} --region ${{ env.AWS_REGION }} || \
+        aws ecr create-repository --repository-name ${{ env.FRONTEND_REPO_NAME }} --region ${{ env.AWS_REGION }}
+        
+        # Create backend repository  
+        aws ecr describe-repositories --repository-names ${{ env.BACKEND_REPO_NAME }} --region ${{ env.AWS_REGION }} || \
+        aws ecr create-repository --repository-name ${{ env.BACKEND_REPO_NAME }} --region ${{ env.AWS_REGION }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push frontend image
+      id: build-frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./client/Dockerfile
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO_NAME }}:latest
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO_NAME }}:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push backend image
+      id: build-backend
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./server/Dockerfile
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO_NAME }}:latest
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO_NAME }}:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Set output URIs
+      id: outputs
+      run: |
+        FRONTEND_URI="${{ steps.login-ecr.outputs.registry }}/${{ env.FRONTEND_REPO_NAME }}:latest"
+        BACKEND_URI="${{ steps.login-ecr.outputs.registry }}/${{ env.BACKEND_REPO_NAME }}:latest"
+        
+        echo "frontend-uri=$FRONTEND_URI" >> $GITHUB_OUTPUT
+        echo "backend-uri=$BACKEND_URI" >> $GITHUB_OUTPUT
+        
+        echo "## 🚀 Images Pushed Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Frontend Image:" >> $GITHUB_STEP_SUMMARY
+        echo "\`$FRONTEND_URI\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Backend Image:" >> $GITHUB_STEP_SUMMARY
+        echo "\`$BACKEND_URI\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Tagged Versions:" >> $GITHUB_STEP_SUMMARY
+        echo "- \`latest\` - Latest stable version" >> $GITHUB_STEP_SUMMARY
+        echo "- \`${{ github.sha }}\` - Commit-specific version" >> $GITHUB_STEP_SUMMARY
+
+    - name: Output repository URIs
+      run: |
+        echo "✅ Frontend Image: ${{ steps.outputs.outputs.frontend-uri }}"
+        echo "✅ Backend Image: ${{ steps.outputs.outputs.backend-uri }}"
+        echo ""
+        echo "🔧 Use these URIs in your docker-compose.prod.yml:"
+        echo "export ECR_REPO_FRONTEND=${{ steps.outputs.outputs.frontend-uri }}"
+        echo "export ECR_REPO_BACKEND=${{ steps.outputs.outputs.backend-uri }}"
