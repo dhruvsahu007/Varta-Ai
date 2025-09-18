@@ -31,3 +31,10 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Archive folder for large files
+archive/
+
+# Additional build artifacts
+*.tsbuildinfo
+.eslintcache
