@@ -11,6 +11,12 @@ COPY package*.json ./
 COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 
+# Copy all root-level config files needed for build
+COPY vite.config.ts ./
+COPY postcss.config.js ./
+COPY tailwind.config.ts ./
+COPY components.json ./
+
 # Copy source code directories
 COPY server/ ./server/
 COPY shared/ ./shared/
