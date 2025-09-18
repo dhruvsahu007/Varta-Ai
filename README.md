@@ -79,6 +79,7 @@ cp .env.example .env
 # - DATABASE_URL=your-postgres-url
 # - OPENAI_API_KEY=your-openai-api-key  
 # - SESSION_SECRET=your-secure-session-secret
+# - OPENSEARCH_ENDPOINT=https://your-collection.region.aoss.amazonaws.com
 ```
 
 ### 4. Database Setup
@@ -138,6 +139,62 @@ npm run dev:backend   # Port 5000
                         │   + WebSocket   │
                         └─────────────────┘
 ```
+
+## 🚀 Enhanced Message Flow
+
+When a new message is created, the system automatically:
+
+1. **Saves to PostgreSQL** - Message stored with full metadata
+2. **Generates Embeddings** - OpenAI API creates vector representation  
+3. **Stores in OpenSearch** - Vector saved for semantic search with metadata:
+   - Message content and author info
+   - Channel/DM context  
+   - Timestamps and token counts
+4. **Background Processing** - All vector operations happen asynchronously
+
+### Vector Search Features
+- **Semantic Search** - Find messages by meaning, not just keywords
+- **Smart RAG** - Retrieve relevant context for AI responses
+- **Content Discovery** - Surface related conversations and knowledge
+
+### Testing the Complete Flow
+
+**Option 1: API Endpoint Test**
+```bash
+# Start your backend server first
+npm run dev:backend
+
+# Then test the complete flow via HTTP endpoint
+node test-embedding-endpoint.js
+# OR make a POST request to: http://localhost:5000/test-message
+```
+
+**Option 2: Direct Module Test**
+```bash
+node test-message-embedding-flow.js
+```
+
 ## 🧑‍💻 Author
 
 Made by Dhruv Sahu as part of a fullstack AI Slack Clone project.
+
+---
+
+## 🧹 Cleaned for Deployment
+
+This repository has been cleaned and optimized for production deployment:
+
+### Removed Development Files:
+- All test-*.js debug and diagnostic scripts
+- Local database files (dev.db, sessions.db) 
+- Unused attached_assets directory and temporary images
+- Development-only migration utility scripts
+
+### Production Ready:
+- ✅ Core application code preserved
+- ✅ Database migrations maintained in `/migrations`
+- ✅ All npm scripts functional (`npm run dev`, `npm run build`, `npm start`)
+- ✅ Environment configuration intact
+- ✅ Deployment configs preserved
+
+The application is now deployment-ready with a clean, production-focused codebase.

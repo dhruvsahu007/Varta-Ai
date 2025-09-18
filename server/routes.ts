@@ -19,7 +19,52 @@ import {
   generateMeetingNotes 
 } from "./ai";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
+import { generateEmbedding, generateQueryEmbedding } from "./embeddingsService";
+import { insertVector, searchVector } from "./vectorService";
+import type { Message, User } from "@shared/schema";
+
+/**
+ * Process message embedding and store in vector database
+ */
+async function processMessageEmbedding(message: Message & { author: User }, content: string): Promise<void> {
+  try {
+    console.log(`[VectorProcessing] Processing embeddings for message ${message.id}`);
+    
+    // Generate embedding for the message content
+    const embeddingResult = await generateEmbedding(content);
+    
+    if (!embeddingResult) {
+      console.warn(`[VectorProcessing] Failed to generate embedding for message ${message.id}`);
+      return;
+    }
+    
+    // Prepare metadata for the vector
+    const metadata = {
+      messageId: message.id,
+      content: content,
+      authorId: message.authorId,
+      authorName: message.author.displayName,
+      authorUsername: message.author.username,
+      channelId: message.channelId,
+      recipientId: message.recipientId, // For DMs
+      createdAt: message.createdAt?.toISOString() || new Date().toISOString(),
+      type: message.channelId ? 'channel_message' : 'direct_message',
+      tokenCount: embeddingResult.tokenCount,
+      embeddingModel: embeddingResult.model,
+    };
+    
+    // Insert vector into OpenSearch
+    const vectorId = `message_${message.id}`;
+    await insertVector(vectorId, embeddingResult.embedding, metadata);
+    
+    console.log(`✅ Successfully processed embeddings for message ${message.id}`);
+    
+  } catch (error) {
+    console.error(`❌ Error processing embeddings for message ${message.id}:`, error);
+    // Don't throw - this is a background process and shouldn't affect message creation
+  }
+}
 
 export function registerRoutes(app: Express): Server {
   // Rate limiting for AI endpoints
@@ -140,16 +185,22 @@ export function registerRoutes(app: Express): Server {
       
       console.log("[Messages] Created message:", message);
       
-      // Analyze tone in background
+      // Background processing: tone analysis, embeddings, and vector storage
       if (messageData.content) {
-        try {
-          const contentStr = Array.isArray(messageData.content) ? messageData.content.join(' ') : String(messageData.content);
+        const contentStr = Array.isArray(messageData.content) 
+          ? messageData.content.join(' ') 
+          : String(messageData.content);
+          
+        // Run background tasks asynchronously (don't await)
+        Promise.allSettled([
+          // Tone analysis
           analyzeTone(contentStr).then(analysis => {
             console.log("Tone analysis:", analysis);
-          }).catch(console.error);
-        } catch (err) {
-          console.error("Tone analysis error:", err);
-        }
+          }),
+          
+          // Generate embeddings and store in vector database
+          processMessageEmbedding(message, contentStr)
+        ]).catch(console.error);
       }
 
       res.status(201).json(message);
@@ -369,10 +420,68 @@ export function registerRoutes(app: Express): Server {
 
       console.log("[API] Searching organizational memory for:", query);
       
-      // Search relevant messages across channels (simplified)
-      const relevantMessages = await storage.searchMessages(query);
+      let relevantMessages = [];
       
-      console.log("[API] Found", relevantMessages.length, "relevant messages");
+      // Try vector search first (if embeddings are available)
+      try {
+        const queryEmbedding = await generateQueryEmbedding(query);
+        if (queryEmbedding) {
+          console.log("[API] Using vector search for semantic results");
+          const vectorResults = await searchVector(queryEmbedding, 10);
+          
+          if (vectorResults.length > 0) {
+            console.log("[API] Found", vectorResults.length, "vector search results");
+            
+            // Convert vector results to message format
+            const messageIds = vectorResults
+              .filter(result => result.metadata.messageId)
+              .map(result => parseInt(result.metadata.messageId));
+            
+            if (messageIds.length > 0) {
+              // Fetch full message details from database
+              const vectorMessages = await db
+                .select({
+                  id: messages.id,
+                  content: messages.content,
+                  authorId: messages.authorId,
+                  channelId: messages.channelId,
+                  parentMessageId: messages.parentMessageId,
+                  recipientId: messages.recipientId,
+                  aiAnalysis: messages.aiAnalysis,
+                  createdAt: messages.createdAt,
+                  updatedAt: messages.updatedAt,
+                  author: users,
+                  channel: channels,
+                })
+                .from(messages)
+                .innerJoin(users, eq(messages.authorId, users.id))
+                .leftJoin(channels, eq(messages.channelId, channels.id))
+                .where(inArray(messages.id, messageIds));
+              
+              relevantMessages = vectorMessages;
+              console.log("[API] Retrieved", relevantMessages.length, "messages from vector search");
+            }
+          }
+        }
+      } catch (vectorError) {
+        console.warn("[API] Vector search failed, falling back to text search:", vectorError.message);
+        console.warn("[API] Vector search error details:", vectorError);
+      }
+      
+      // Fallback to traditional text search if vector search didn't work or found no results
+      if (relevantMessages.length === 0) {
+        console.log("[API] Using traditional text search");
+        try {
+          relevantMessages = await storage.searchMessages(query);
+          console.log("[API] Found", relevantMessages.length, "text search results");
+        } catch (textSearchError) {
+          console.error("[API] Text search also failed:", textSearchError);
+          return res.status(500).json({
+            message: "Both vector and text search failed",
+            details: "Unable to search organizational memory"
+          });
+        }
+      }
       
       if (relevantMessages.length === 0) {
         console.warn("[API] No messages found for query, returning empty result");
@@ -380,7 +489,7 @@ export function registerRoutes(app: Express): Server {
           query,
           summary: "No relevant messages found for your query. This could mean: 1) The search terms don't match any existing messages, 2) There are no messages in the database yet, or 3) All messages are in private channels or direct messages.",
           sources: [],
-          keyPoints: ["Try using different keywords", "Check if there are any messages in public channels", "Verify that the database has been seeded with sample data"]
+          keyPoints: ["Try using different keywords", "Check if there are any messages in public channels", "Verify that the database has been seeded with sample data", "Make sure OPENAI_API_KEY is set for semantic search"]
         });
       }
 
@@ -500,6 +609,220 @@ export function registerRoutes(app: Express): Server {
       res.json(results);
     } catch (error) {
       res.status(500).json({ message: "Search failed" });
+    }
+  });
+
+  // Test route for complete message embedding flow
+  app.post("/test-message", async (req, res) => {
+    try {
+      console.log("[TestRoute] Starting complete message embedding flow test...");
+      
+      // Sample messages to test with
+      const sampleMessages = [
+        "The Atlas Project kickoff meeting is scheduled for next Tuesday at 2:00 PM. We'll discuss the new AI integration features and roadmap.",
+        "User research findings show that 78% of users want better search functionality and 65% need improved collaboration tools.",
+        "Great work on the Atlas Project demo today! The stakeholders were impressed. Beta release target is end of month.",
+        "Anyone up for a coffee chat at 3 PM? Let's discuss the new project requirements and technical specifications.",
+        "Important: All hands meeting tomorrow at 10 AM. We'll cover Q4 goals, budget planning, and project timelines."
+      ];
+      
+      const randomMessage = sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
+      console.log("[TestRoute] Sample message:", randomMessage);
+      
+      // Step 1: Save message to PostgreSQL (simulate authenticated user)
+      const testUser = await storage.getUserByUsername('testuser') || 
+                       await storage.getUserByUsername('alice');
+      
+      if (!testUser) {
+        return res.status(500).json({ 
+          error: "No test user found. Please run 'npm run seed' first." 
+        });
+      }
+      
+      const testChannel = await storage.getChannelByName('general');
+      if (!testChannel) {
+        return res.status(500).json({ 
+          error: "No test channel found. Please run 'npm run seed' first." 
+        });
+      }
+      
+      const messageData = {
+        content: randomMessage,
+        authorId: testUser.id,
+        channelId: testChannel.id,
+      };
+      
+      const savedMessage = await storage.createMessage(messageData);
+      console.log(`[TestRoute] ✅ Message saved to PostgreSQL with ID: ${savedMessage.id}`);
+      
+      // Step 2: Generate embedding
+      const embeddingResult = await generateEmbedding(randomMessage);
+      if (!embeddingResult) {
+        return res.status(500).json({ 
+          error: "Failed to generate embedding. Check OPENAI_API_KEY." 
+        });
+      }
+      
+      console.log(`[TestRoute] ✅ Generated embedding: ${embeddingResult.embedding.length} dimensions`);
+      
+      // Step 3: Insert vector into OpenSearch
+      const metadata = {
+        messageId: savedMessage.id,
+        content: randomMessage,
+        authorId: savedMessage.authorId,
+        authorName: savedMessage.author.displayName,
+        authorUsername: savedMessage.author.username,
+        channelId: savedMessage.channelId,
+        createdAt: savedMessage.createdAt?.toISOString() || new Date().toISOString(),
+        type: 'channel_message',
+        tokenCount: embeddingResult.tokenCount,
+        embeddingModel: embeddingResult.model,
+      };
+      
+      const vectorId = `message_${savedMessage.id}`;
+      await insertVector(vectorId, embeddingResult.embedding, metadata);
+      console.log(`[TestRoute] ✅ Vector inserted into OpenSearch with ID: ${vectorId}`);
+      
+      // Step 4: Search for similar vectors
+      const searchResults = await searchVector(embeddingResult.embedding, 3);
+      console.log(`[TestRoute] ✅ Found ${searchResults.length} similar vectors`);
+      
+      // Step 5: Return comprehensive results
+      const response = {
+        success: true,
+        timestamp: new Date().toISOString(),
+        steps: {
+          "1_message_saved": {
+            id: savedMessage.id,
+            content: savedMessage.content,
+            author: savedMessage.author.displayName,
+            channel: testChannel.name,
+          },
+          "2_embedding_generated": {
+            model: embeddingResult.model,
+            dimensions: embeddingResult.embedding.length,
+            tokens: embeddingResult.tokenCount,
+            preview: embeddingResult.embedding.slice(0, 5), // First 5 values
+          },
+          "3_vector_stored": {
+            vectorId: vectorId,
+            metadata: {
+              messageId: metadata.messageId,
+              authorName: metadata.authorName,
+              type: metadata.type,
+            }
+          },
+          "4_similarity_search": {
+            query: "Same embedding as inserted message",
+            resultsCount: searchResults.length,
+            topResults: searchResults.map(result => ({
+              id: result.id,
+              score: Math.round(result.score * 10000) / 10000, // Round to 4 decimal places
+              messageId: result.metadata.messageId,
+              content: result.metadata.content?.substring(0, 100) + "...",
+              author: result.metadata.authorName,
+            }))
+          }
+        },
+        summary: {
+          message: "Message embedding flow completed successfully!",
+          postgresql: "✅ Message stored",
+          openai: "✅ Embedding generated", 
+          opensearch: "✅ Vector indexed",
+          search: `✅ Found ${searchResults.length} similar results`,
+        }
+      };
+      
+      res.json(response);
+      
+    } catch (error: any) {
+      console.error("[TestRoute] ❌ Test failed:", error);
+      
+      let errorMessage = error.message;
+      let suggestions = [];
+      
+      if (error.message.includes('OPENAI_API_KEY')) {
+        suggestions.push("Add OPENAI_API_KEY to your .env file");
+      }
+      
+      if (error.message.includes('OPENSEARCH_ENDPOINT')) {
+        suggestions.push("Add OPENSEARCH_ENDPOINT to your .env file");
+      }
+      
+      if (error.message.includes('authentication')) {
+        suggestions.push("Check your AWS credentials and OpenSearch permissions");
+      }
+      
+      res.status(500).json({
+        success: false,
+        error: errorMessage,
+        suggestions,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Quick test endpoint for org memory functionality
+  app.get("/test-org-memory", async (req, res) => {
+    try {
+      const testQuery = req.query.q as string || "Atlas Project";
+      console.log("[TestOrgMemory] Testing with query:", testQuery);
+      
+      // Test basic text search
+      const textResults = await storage.searchMessages(testQuery);
+      console.log("[TestOrgMemory] Text search found:", textResults.length, "messages");
+      
+      // Test vector search if available
+      let vectorResults = [];
+      try {
+        const queryEmbedding = await generateQueryEmbedding(testQuery);
+        if (queryEmbedding) {
+          const vectorSearchResults = await searchVector(queryEmbedding, 5);
+          vectorResults = vectorSearchResults;
+          console.log("[TestOrgMemory] Vector search found:", vectorResults.length, "results");
+        }
+      } catch (vectorError) {
+        console.log("[TestOrgMemory] Vector search not available:", vectorError.message);
+      }
+      
+      // Sample messages in database
+      const sampleMessages = await db
+        .select({
+          id: messages.id,
+          content: messages.content,
+          channelId: messages.channelId,
+        })
+        .from(messages)
+        .limit(5);
+      
+      res.json({
+        query: testQuery,
+        textSearchResults: textResults.length,
+        vectorSearchResults: vectorResults.length,
+        sampleMessages: sampleMessages,
+        textResults: textResults.slice(0, 3).map(msg => ({
+          content: msg.content?.substring(0, 100) + "...",
+          author: msg.author.displayName,
+          channel: msg.channel?.name
+        })),
+        vectorResults: vectorResults.slice(0, 3).map(result => ({
+          score: result.score,
+          content: result.metadata.content?.substring(0, 100) + "...",
+          author: result.metadata.authorName
+        })),
+        status: {
+          database: sampleMessages.length > 0 ? "✅ Has messages" : "❌ No messages",
+          textSearch: textResults.length > 0 ? "✅ Working" : "❌ No results",
+          vectorSearch: vectorResults.length > 0 ? "✅ Working" : "❌ No results or not configured"
+        }
+      });
+      
+    } catch (error) {
+      console.error("[TestOrgMemory] Error:", error);
+      res.status(500).json({ 
+        error: error.message,
+        suggestion: "Check database connection and API keys"
+      });
     }
   });
 

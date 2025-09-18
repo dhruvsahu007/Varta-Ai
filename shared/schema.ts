@@ -1,10 +1,10 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   email: text("email").notNull().unique(),
@@ -12,55 +12,55 @@ export const users = sqliteTable("users", {
   avatar: text("avatar"),
   status: text("status").notNull().default("available"), // available, away, busy, offline
   title: text("title"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const channels = sqliteTable("channels", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const channels = pgTable("channels", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description"),
-  isPrivate: integer("is_private", { mode: "boolean" }).notNull().default(false),
+  isPrivate: boolean("is_private").notNull().default(false),
   createdBy: integer("created_by").notNull().references(() => users.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const channelMembers = sqliteTable("channel_members", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const channelMembers = pgTable("channel_members", {
+  id: serial("id").primaryKey(),
   channelId: integer("channel_id").notNull().references(() => channels.id),
   userId: integer("user_id").notNull().references(() => users.id),
-  joinedAt: integer("joined_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-export const messages: any = sqliteTable("messages", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const messages: any = pgTable("messages", {
+  id: serial("id").primaryKey(),
   content: text("content").notNull(),
   authorId: integer("author_id").notNull().references(() => users.id),
   channelId: integer("channel_id").references(() => channels.id),
   parentMessageId: integer("parent_message_id").references((): any => messages.id),
   recipientId: integer("recipient_id").references(() => users.id), // for DMs
-  aiAnalysis: text("ai_analysis", { mode: "json" }), // stores tone, impact, clarity analysis
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  aiAnalysis: json("ai_analysis"), // stores tone, impact, clarity analysis
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const aiSuggestions = sqliteTable("ai_suggestions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const aiSuggestions = pgTable("ai_suggestions", {
+  id: serial("id").primaryKey(),
   messageId: integer("message_id").notNull().references(() => messages.id),
   suggestedReply: text("suggested_reply").notNull(),
   confidence: integer("confidence").notNull(), // 0-100
   reasoning: text("reasoning"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const meetingNotes = sqliteTable("meeting_notes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const meetingNotes = pgTable("meeting_notes", {
+  id: serial("id").primaryKey(),
   title: text("title").notNull(),
   content: text("content").notNull(),
   channelId: integer("channel_id").references(() => channels.id),
   startMessageId: integer("start_message_id").references(() => messages.id),
   endMessageId: integer("end_message_id").references(() => messages.id),
   generatedBy: integer("generated_by").notNull().references(() => users.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations

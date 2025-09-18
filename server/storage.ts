@@ -5,17 +5,19 @@ import {
   type MeetingNotes, type InsertMeetingNotes, type ChannelMember
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, not, isNull, sql, like } from "drizzle-orm";
+import { eq, desc, and, or, isNull, sql, inArray, asc, not } from "drizzle-orm";
 import session from "express-session";
-import connectSqlite3 from "connect-sqlite3";
+import connectPgSimple from "connect-pg-simple";
+import MemoryStore from "memorystore";
 
-const SQLiteStore = connectSqlite3(session);
+const PostgresStore = connectPgSimple(session);
 
 export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUserStatus(id: number, status: string): Promise<void>;
 
@@ -51,10 +53,27 @@ export class DatabaseStorage implements IStorage {
   sessionStore: any;
 
   constructor() {
-    this.sessionStore = new SQLiteStore({ 
-      db: 'sessions.db',
-      table: 'sessions'
-    });
+    // Use in-memory store for development to avoid SSL issues
+    if (process.env.NODE_ENV === 'development') {
+      const MemStoreClass = MemoryStore(session);
+      this.sessionStore = new MemStoreClass({
+        checkPeriod: 86400000 // prune expired entries every 24h
+      });
+      console.log('[Session] Using memory store for development');
+    } else {
+      this.sessionStore = new PostgresStore({
+        conString: process.env.DATABASE_URL!,
+        tableName: 'sessions', 
+        createTableIfMissing: true,
+        // SSL configuration for managed databases
+        ...(process.env.DATABASE_URL?.includes('rds.amazonaws.com') || 
+            process.env.DATABASE_URL?.includes('neon.tech') ||
+            process.env.DATABASE_URL?.includes('supabase.co') ? {
+          ssl: { rejectUnauthorized: false }
+        } : {})
+      });
+      console.log('[Session] Using PostgreSQL store for production');
+    }
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -70,6 +89,10 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -312,13 +335,26 @@ export class DatabaseStorage implements IStorage {
         .innerJoin(users, eq(messages.authorId, users.id))
         .leftJoin(channels, eq(messages.channelId, channels.id));
 
-      // Add search condition - SQLite uses LIKE for text search (case-insensitive)
-      const searchPattern = `%${query.toLowerCase()}%`;
-      console.log("[Storage] Search pattern:", searchPattern);
+      // Add search condition - PostgreSQL case-insensitive search with keyword matching
+      console.log("[Storage] Original query:", query);
       
-      let whereConditions = [
-        sql`lower(${messages.content}) LIKE ${searchPattern}`
-      ];
+      // Split query into keywords for better matching
+      const keywords = query.toLowerCase().trim().split(/\s+/).filter(word => word.length > 2);
+      console.log("[Storage] Extracted keywords:", keywords);
+      
+      let whereConditions = [];
+      
+      if (keywords.length > 1) {
+        // For multiple keywords, search for each one (OR logic for better results)
+        const keywordConditions = keywords.map(keyword => 
+          sql`LOWER(${messages.content}) LIKE ${`%${keyword}%`}`
+        );
+        whereConditions.push(or(...keywordConditions));
+      } else {
+        // Single word or short query - use original approach
+        const searchPattern = `%${query.toLowerCase()}%`;
+        whereConditions.push(sql`LOWER(${messages.content}) LIKE ${searchPattern}`);
+      }
       
       // Only search in public channels for org memory (exclude DMs and private channels)
       whereConditions.push(
